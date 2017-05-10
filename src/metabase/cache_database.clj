@@ -1,4 +1,4 @@
-(ns metabase.analyze-database
+(ns metabase.cache-database
   "The logic for doing DB and Table syncing itself."
   (:require [clojure.tools.logging :as log]
             [metabase
@@ -12,7 +12,7 @@
 
 (defonce ^:private currently-syncing-dbs (atom #{}))
 
-(defn- analyze-database-with-tracking! [driver database]
+(defn- cache-database-with-tracking! [driver database]
   (let [start-time (System/nanoTime)
         tracking-hash (str (java.util.UUID/randomUUID))]
     (log/info (u/format-color 'magenta "Syncing %s database '%s'..." (name driver) (:name database)))
@@ -29,7 +29,7 @@
     (log/info (u/format-color 'magenta "Finished analyzing %s database '%s'. (%s)" (name driver) (:name database)
                               (u/format-nanoseconds (- (System/nanoTime) start-time))))))
 
-(defn- analyze-table-with-tracking! [driver database table]
+(defn- cache-table-with-tracking! [driver database table]
   (let [start-time (System/nanoTime)]
     (log/info (u/format-color 'magenta "Analyzing table '%s' from %s database '%s'..." (:display_name table) (name driver) (:name database)))
 
@@ -41,7 +41,7 @@
     (log/info (u/format-color 'magenta "Finished syncing table '%s' from %s database '%s'. (%s)" (:display_name table) (name driver) (:name database)
                               (u/format-nanoseconds (- (System/nanoTime) start-time))))))
 
-(defn analyze-database!
+(defn cache-database!
   "Analyze DATABASE and all its Tables and Fields."
   [{database-id :id, :as database} & {:keys [full-sync?]}]
   {:pre [(map? database)]}
@@ -54,12 +54,12 @@
           ;; mark this database as currently syncing so we can prevent duplicate sync attempts (#2337)
           (swap! currently-syncing-dbs conj database-id)
           ;; do our work
-          (driver/sync-in-context db-driver database (partial analyze-database-with-tracking! db-driver database))
+          (driver/sync-in-context db-driver database (partial cache-database-with-tracking! db-driver database))
           (finally
             ;; always cleanup our tracking when we are through
             (swap! currently-syncing-dbs disj database-id)))))))
 
-(defn analyze-table!
+(defn cache-table!
   "Analyze a *single* TABLE and all of its Fields.
    This is used *instead* of `analyze-database!` when syncing just one Table is desirable."
   [table & {:keys [full-sync?]}]
@@ -70,7 +70,7 @@
           full-sync? (if-not (nil? full-sync?)
                        full-sync?
                        (:is_full_sync database))]
-      (driver/sync-in-context db-driver database (partial analyze-table-with-tracking! db-driver database table)))))
+      (driver/sync-in-context db-driver database (partial cache-table-with-tracking! db-driver database table)))))
 
 
 
